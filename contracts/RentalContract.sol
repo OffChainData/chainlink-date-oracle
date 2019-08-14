@@ -11,8 +11,9 @@ import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
  */
 contract RentalContract is ChainlinkClient, Ownable {
     // solium-disable-next-line zeppelin/no-arithmetic-operations
-    uint256 constant private ORACLE_PAYMENT = 1 * LINK;
-    uint256 private rentalAmount = 0.01 ether; //monthly rental amount in wei
+    uint256 private oraclePayment = LINK / 10;
+    uint256 private rentalAmount = 0.000001 ether; //monthly rental amount in wei
+    bool private performBurn = false;
     bytes32 public currentDate;
     mapping(bytes32 => bool) public paidDates;
     mapping(bytes32 => bytes32) public businessDayOfMonth;
@@ -27,7 +28,7 @@ contract RentalContract is ChainlinkClient, Ownable {
         bytes32 indexed date,
         uint256 indexed amount
     );
-
+    
     /**
     * @notice Deploy the contract with a specified address for the LINK
     * and Oracle contract addresses
@@ -38,6 +39,40 @@ contract RentalContract is ChainlinkClient, Ownable {
     constructor(address _link, address _oracle) public {
         setChainlinkToken(_link);
         setChainlinkOracle(_oracle);
+    }
+
+    /**
+    * @notice Sets burn flag
+    * @param _performBurn Burn flag
+    */
+    function setPerformBurn(
+            bool _performBurn
+    )
+        public
+        onlyOwner
+    {
+        performBurn = _performBurn;
+    }
+
+
+    /**
+    * @notice Sets the amount that must be paid to the Oracle
+    * @param _oraclePayment Payment amount
+    */
+    function setLinkPaymentAmount(
+            uint256 _oraclePayment
+    )
+        public
+        onlyOwner
+    {
+        oraclePayment = _oraclePayment;
+    }
+
+    /**
+    * @notice Returns the amount that must be paid to the Oracle
+    */
+    function getLinkPaymentAmount() public view returns (uint256) {
+        return oraclePayment;
     }
 
     /**
@@ -77,13 +112,13 @@ contract RentalContract is ChainlinkClient, Ownable {
         require(tempCurrentDate.length != 0, "Date must be set.");
         //Before issuing the request, we need to ensure that the smart contract
         //will have sufficient funds to pay the rent
-        require(address(this).balance >= rentalAmount, "Insufficient funds to pay rent.");
+        require(!performBurn || (performBurn && address(this).balance >= rentalAmount), "Insufficient funds to pay rent.");
         currentDate = stringToBytes32(_currentDate);
 
         Chainlink.Request memory req = buildChainlinkRequest(stringToBytes32(_jobId), this, this.fulfill.selector);
         req.add("date", _currentDate);
         req.add("region", _region);
-        requestId = sendChainlinkRequestTo(getOracle(), req, ORACLE_PAYMENT);
+        requestId = sendChainlinkRequestTo(getOracle(), req, oraclePayment);
         requests[requestId] = currentDate;
     }
 
@@ -114,22 +149,23 @@ contract RentalContract is ChainlinkClient, Ownable {
    */
     function fulfill(bytes32 _requestId, bytes32 _businessDayOfMonth)
         public
-        recordChainlinkFulfillment(_requestId)
+        //recordChainlinkFulfillment(_requestId)
     {
         emit RequestFulfilled(_requestId, _businessDayOfMonth);
-
         bytes32 dateRequested = requests[_requestId];
         businessDayOfMonth[dateRequested] = _businessDayOfMonth;
 
         //Pay rent if this is the 1st business day of the month
         if (_businessDayOfMonth == "1") {
-            require(address(this).balance >= rentalAmount, "Insufficient funds to pay rent.");
+            require(!performBurn || (performBurn && address(this).balance >= rentalAmount), "Insufficient funds to pay rent.");
                     
             paidDates[dateRequested] = true;
             
-            //Burn ether simulating payment of monthly rent
-            address burn = address(0x00);
-            burn.transfer(rentalAmount);
+            if (performBurn) {
+                //Burn ether simulating payment of monthly rent
+                address burn = address(0x00);
+                burn.transfer(rentalAmount);
+            }
 
             emit Transfer(dateRequested, rentalAmount);
         }

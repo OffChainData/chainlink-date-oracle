@@ -3,10 +3,11 @@ This is an example Solidity contract that simulates a simple rental use case usi
 
 ## Use Case
 A monthly rental amount of **0.01 ether** will be payable on the 1st working day of every month (1WDOM). The 1WDOM is something a smart contract
-cannot  determine itself, so it needs to communitate with an oracle (via a Chainlink node) to get this information. The node uses the [Off Chain Data API](https://www.offchaindata.com) for date information.
+cannot  determine itself, so it needs to communitate with an oracle (via a Chainlink node) to get this information. The node uses the [Off Chain Data API](https://www.offchaindata.com) for working day information.
 
 **Note**
-* The contract must be funded with ether to make rental payments.
+* By default, the contract wont burn ETH to simulate rental payments. If you want to change this behavior, then you
+must set the performBurn property to true.
 * Rental payments are sent to a burner address.
 * The contract must also be funded with LINK tokens to make payments to the oracle. Use this [faucet](https://ropsten.chain.link/) to obtain Ropsten test LINK tokens.
 * You can change the monthly rental amount by calling setRentalAmount()
